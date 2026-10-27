@@ -1,71 +1,48 @@
-export type ScanType = "QR" | "Barcode";
+export type TransactionStatus = "Success" | "Pending" | "Failed";
 
-export type AssetStatus = "In Transit" | "Delivered" | "Flagged";
-
-export type DetectionType =
-  | "Bounding Box Match"
-  | "Anomaly"
-  | "Damaged Barcode"
-  | "Unauthorized Movement"
-  | "Thermal Variance"
-  | "Label Tampering";
-
-export interface AssetScan {
+export interface Transaction {
   id: string;
-  assetName: string;
-  category: "Pharma Cold-Chain" | "Aerospace Components" | "Electronics" | "Automotive Parts" | "Hazardous Materials";
-  scanType: ScanType;
-  location: {
-    city: string;
-    hub: string;
-    coordinates: [number, number];
-  };
-  timestamp: string; // ISO or formatted
-  status: AssetStatus;
-  operator: string;
-  temperature?: string;
-  batteryLevel?: number;
-  anomalyReason?: string;
-  barcodeValue: string;
-}
-
-export interface VisionLog {
-  id: string;
-  cameraId: string;
-  cameraName: string;
-  location: string;
-  detectionType: DetectionType;
-  confidenceScore: number; // 0 - 100
-  time: string; // e.g. "10:24:18.420"
+  customerName: string;
+  customerEmail: string;
+  amount: number;
+  status: TransactionStatus;
+  item: string;
+  paymentMethod: "Stripe" | "Card" | "PayPal" | "Apple Pay";
   timestamp: string;
-  boundingCoordinates?: {
-    x: number; // percentage
-    y: number; // percentage
-    width: number;
-    height: number;
-  };
-  details: string;
-  severity: "low" | "medium" | "high" | "critical";
-  assetIdRef?: string;
 }
 
-export interface SystemMetricPoint {
-  time: string; // e.g. "04:00"
-  fullTimestamp: string;
-  activeTrackers: number;
-  scanVolume: number;
-  qrScans: number;
-  barcodeScans: number;
-  apiLatency: number; // ms
-  anomalyRate: number; // count
+export type ActivityType =
+  | "signup"
+  | "checkout"
+  | "upgrade"
+  | "abandoned"
+  | "api_key"
+  | "refund";
+
+export interface ActivityItem {
+  id: string;
+  type: ActivityType;
+  user: string;
+  email?: string;
+  description: string;
+  timestamp: string;
+  amount?: number;
 }
 
-export interface HeroMetric {
+export interface RevenueDataPoint {
+  date: string;
+  day: string;
+  revenue: number;
+  activeUsers: number;
+  orders: number;
+  refunds: number;
+}
+
+export interface KPIMetric {
   title: string;
-  value: string | number;
+  value: string;
   change: string;
   changePositive: boolean;
   subtext: string;
   sparklineData: number[];
-  color: "cyan" | "emerald" | "purple" | "amber" | "rose";
 }

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OmniTrace Asset Command Center | Real-Time Telemetry & AI Vision",
+  title: "PulseMetrics Dashboard — SaaS & E-commerce Analytics",
   description:
-    "Enterprise physical asset tracking command center processing high-velocity QR/barcode scans and AI camera vision logging.",
+    "Real-time revenue metrics, user activity feed, and transaction monitoring dashboard.",
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+      <body className="bg-zinc-950 text-zinc-100 min-h-screen antialiased selection:bg-indigo-500/20 selection:text-indigo-200">
         {children}
       </body>
     </html>

@@ -1,262 +1,194 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import { Header } from "@/components/Header";
-import { HeroMetrics } from "@/components/HeroMetrics";
-import { VisionFeed } from "@/components/VisionFeed";
-import { ScanVelocityChart } from "@/components/ScanVelocityChart";
-import { AssetLedger } from "@/components/AssetLedger";
-import { AssetDetailModal } from "@/components/AssetDetailModal";
+import { KPICards } from "@/components/KPICards";
+import { RevenueChart } from "@/components/RevenueChart";
+import { ActivityFeed } from "@/components/ActivityFeed";
+import { TransactionTable } from "@/components/TransactionTable";
+import { TransactionModal } from "@/components/TransactionModal";
 import {
-  initialAssetScans,
-  initialVisionLogs,
-  initialSystemMetrics,
-  generateMockScanPayload,
-  generateMockVisionPayload,
+  initialRevenueData,
+  extended30DaysRevenue,
+  initialTransactions,
+  initialActivities,
+  generateMockTransaction,
+  generateMockActivity,
 } from "@/data/mockData";
-import { AssetScan, VisionLog, SystemMetricPoint } from "@/types";
-import { Zap, Radio, Bell, ArrowUpRight } from "lucide-react";
+import { Transaction, ActivityItem, RevenueDataPoint } from "@/types";
+import { ArrowUpRight, Zap, CheckCircle2 } from "lucide-react";
 
-export default function CommandCenterPage() {
-  const [assetScans, setAssetScans] = useState<AssetScan[]>(initialAssetScans);
-  const [visionLogs, setVisionLogs] = useState<VisionLog[]>(initialVisionLogs);
-  const [systemMetrics, setSystemMetrics] = useState<SystemMetricPoint[]>(initialSystemMetrics);
-  const [selectedAsset, setSelectedAsset] = useState<AssetScan | null>(null);
+export default function DashboardPage() {
+  const [revenueData, setRevenueData] = useState<RevenueDataPoint[]>(initialRevenueData);
+  const [timeRange, setTimeRange] = useState<"7d" | "30d">("7d");
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+  const [activities, setActivities] = useState<ActivityItem[]>(initialActivities);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isLiveSimulating, setIsLiveSimulating] = useState<boolean>(true);
-  const [lastLiveEvent, setLastLiveEvent] = useState<{ id: string; name: string; type: string } | null>(null);
-  const scanCounterRef = useRef<number>(184320);
+  const [lastEvent, setLastEvent] = useState<string | null>(null);
 
-  // Hero calculated metrics
-  const totalScansCount = scanCounterRef.current;
-  const anomaliesCount =
-    assetScans.filter((s) => s.status === "Flagged").length +
-    visionLogs.filter(
-      (l) =>
-        l.detectionType === "Anomaly" ||
-        l.detectionType === "Damaged Barcode" ||
-        l.detectionType === "Thermal Variance"
-    ).length;
+  // Compute live KPI metrics
+  const activeDataset = timeRange === "7d" ? revenueData : extended30DaysRevenue;
+  const totalRevenue = activeDataset.reduce((acc, curr) => acc + curr.revenue, 0);
+  const activeUsers = activeDataset[activeDataset.length - 1]?.activeUsers || 16840;
+  const totalOrders = activeDataset.reduce((acc, curr) => acc + curr.orders, 0);
+
+  const revenueSpark = activeDataset.map((d) => d.revenue);
+  const usersSpark = activeDataset.map((d) => d.activeUsers);
+  const ordersSpark = activeDataset.map((d) => d.orders);
 
   /**
-   * Pushes a new fake QR or barcode payload into application state
-   * and updates both the AssetLedger and ScanVelocityChart dynamically.
+   * Pushes a new realistic transaction and updates the live revenue chart
    */
-  const pushNewScanPayload = useCallback(() => {
-    const newScan = generateMockScanPayload();
+  const handleAddNewTransaction = useCallback(() => {
+    const newTx = generateMockTransaction();
+    setTransactions((prev) => [newTx, ...prev.slice(0, 49)]);
 
-    // 1. Prepend to Asset Ledger
-    setAssetScans((prev) => [newScan, ...prev.slice(0, 99)]);
-    scanCounterRef.current += Math.floor(Math.random() * 8 + 3);
-
-    // 2. Dynamically update ScanVelocityChart time-series
-    setSystemMetrics((prev) => {
+    // Update current day's revenue in the chart
+    setRevenueData((prev) => {
       const updated = [...prev];
-      const lastIndex = updated.length - 1;
-      const currentPoint = updated[lastIndex];
-
-      const scanIncrement = Math.floor(Math.random() * 45 + 25);
-      const isQr = newScan.scanType === "QR";
-
-      updated[lastIndex] = {
-        ...currentPoint,
-        scanVolume: currentPoint.scanVolume + scanIncrement,
-        qrScans: isQr ? currentPoint.qrScans + scanIncrement : currentPoint.qrScans,
-        barcodeScans: !isQr ? currentPoint.barcodeScans + scanIncrement : currentPoint.barcodeScans,
-        activeTrackers: currentPoint.activeTrackers + (Math.random() > 0.5 ? 1 : 0),
-        anomalyRate: newScan.status === "Flagged" ? currentPoint.anomalyRate + 1 : currentPoint.anomalyRate,
+      const last = updated.length - 1;
+      updated[last] = {
+        ...updated[last],
+        revenue: updated[last].revenue + newTx.amount,
+        orders: updated[last].orders + (newTx.status === "Success" ? 1 : 0),
+        activeUsers: updated[last].activeUsers + Math.floor(Math.random() * 3 + 1),
       };
-
       return updated;
     });
 
-    // 3. Occasionally generate a matched AI camera vision event for this asset
-    if (Math.random() > 0.3) {
-      const newVisionLog = generateMockVisionPayload(newScan, newScan.status === "Flagged");
-      setVisionLogs((prev) => [newVisionLog, ...prev.slice(0, 49)]);
-    }
+    // Also push a corresponding activity item
+    const newAct: ActivityItem = {
+      id: `act-${Date.now().toString().slice(-4)}`,
+      type: newTx.status === "Success" ? "checkout" : "refund",
+      user: newTx.customerName,
+      email: newTx.customerEmail,
+      description:
+        newTx.status === "Success"
+          ? `Purchased ${newTx.item} ($${newTx.amount.toFixed(2)})`
+          : `Payment failed for ${newTx.item}`,
+      timestamp: "Just now",
+      amount: newTx.status === "Success" ? newTx.amount : undefined,
+    };
+    setActivities((prev) => [newAct, ...prev.slice(0, 39)]);
 
-    // 4. Update the live visual pulse badge
-    setLastLiveEvent({
-      id: newScan.id,
-      name: newScan.assetName,
-      type: newScan.scanType,
-    });
+    setLastEvent(`New order #${newTx.id} ($${newTx.amount.toFixed(2)})`);
   }, []);
 
   /**
-   * Simulation Interval Hook:
-   * Triggers every 3.5 seconds when isLiveSimulating is enabled.
+   * Live Simulation Interval Hook
    */
   useEffect(() => {
     if (!isLiveSimulating) return;
 
     const interval = setInterval(() => {
-      pushNewScanPayload();
-    }, 3500);
+      // 60% chance to push transaction or activity
+      if (Math.random() > 0.4) {
+        handleAddNewTransaction();
+      } else {
+        const newAct = generateMockActivity();
+        setActivities((prev) => [newAct, ...prev.slice(0, 39)]);
+        setLastEvent(`User action: ${newAct.description}`);
+      }
+    }, 4500);
 
     return () => clearInterval(interval);
-  }, [isLiveSimulating, pushNewScanPayload]);
-
-  // Asset selection by ID lookup
-  const handleSelectAssetById = (assetId: string) => {
-    const found = assetScans.find((a) => a.id === assetId);
-    if (found) {
-      setSelectedAsset(found);
-    }
-  };
+  }, [isLiveSimulating, handleAddNewTransaction]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Background ambient lighting effects */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        {/* Top-left cyan nebula glow */}
-        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[140px]" />
-        {/* Top-right purple nebula glow */}
-        <div className="absolute top-20 -right-40 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[150px]" />
-        {/* Center-bottom emerald nebula glow */}
-        <div className="absolute -bottom-40 left-1/3 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[150px]" />
-      </div>
-
-      {/* Top Header Command Bar */}
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
+      {/* Top Header */}
       <Header
         isLiveSimulating={isLiveSimulating}
         onToggleLiveSimulation={() => setIsLiveSimulating(!isLiveSimulating)}
-        edgeNodesOnline={42}
-        totalEdgeNodes={42}
       />
 
-      {/* Live Stream Telemetry Banner */}
-      <div className="relative z-20 border-b border-white/5 bg-slate-900/40 backdrop-blur-sm px-4 sm:px-6 py-2">
-        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-cyan-300 font-bold">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
-              </span>
-              REAL-TIME SIMULATION ENGINE:
-            </span>
-            <span className="text-slate-400 hidden sm:inline">
-              Pushing continuous QR/Barcode 2D optical payloads every 3.5s
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {lastLiveEvent && (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={lastLiveEvent.id}
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.3 }}
-                  className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-[11px]"
-                >
-                  <Zap className="h-3 w-3 text-cyan-400 animate-bounce" />
-                  <span>JUST INGESTED:</span>
-                  <span className="font-bold text-white">{lastLiveEvent.id}</span>
-                  <span className="text-slate-400 hidden md:inline">({lastLiveEvent.type})</span>
-                </motion.div>
-              </AnimatePresence>
-            )}
-
-            <button
-              onClick={pushNewScanPayload}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/25 transition-all shadow-[0_0_10px_rgba(6,182,212,0.2)]"
-            >
-              <span>+ Force Next Scan</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Command Center Bento Grid */}
-      <main className="relative z-10 flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Bento Row 1: Top Hero Metrics */}
+      {/* Main Content */}
+      <main className="flex-1 max-w-[1500px] w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Row 1: KPI Cards */}
         <motion.section
-          initial={{ opacity: 0, y: 18 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
         >
-          <HeroMetrics
-            metrics={systemMetrics}
-            totalActiveAssets={14892 + (assetScans.length - initialAssetScans.length)}
-            totalScansToday={totalScansCount}
-            anomaliesDetected={anomaliesCount}
-            systemUptime="99.94%"
-            apiLatency={18}
+          <KPICards
+            totalRevenue={totalRevenue}
+            activeUsers={activeUsers}
+            totalOrders={totalOrders}
+            serverUptime="99.98%"
+            revenueSpark={revenueSpark}
+            usersSpark={usersSpark}
+            ordersSpark={ordersSpark}
           />
         </motion.section>
 
-        {/* Bento Row 2: Center Dual Widgets (Vision Feed + Scan Velocity Chart) */}
+        {/* Row 2: Revenue Chart & Activity Feed */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          {/* Center Left: Simulated Live AI Camera Feed Widget (6 cols on lg) */}
+          {/* Revenue Chart (7 cols on lg, 8 on xl) */}
           <motion.div
-            initial={{ opacity: 0, y: 22 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
-            className="lg:col-span-6 xl:col-span-6 flex flex-col"
+            transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
+            className="lg:col-span-7 xl:col-span-8 flex flex-col"
           >
-            <VisionFeed
-              logs={visionLogs}
-              onTriggerAnomaly={() => {
-                const flagged = generateMockVisionPayload(undefined, true);
-                setVisionLogs((prev) => [flagged, ...prev.slice(0, 49)]);
-              }}
-              onSimulateDetection={() => {
-                const matched = generateMockVisionPayload(assetScans[0], false);
-                setVisionLogs((prev) => [matched, ...prev.slice(0, 49)]);
-              }}
-              onSelectAsset={handleSelectAssetById}
+            <RevenueChart
+              data={activeDataset}
+              timeRange={timeRange}
+              onTimeRangeChange={setTimeRange}
             />
           </motion.div>
 
-          {/* Center Right: Scan Velocity Chart (6 cols on lg) */}
+          {/* Activity Feed (5 cols on lg, 4 on xl) */}
           <motion.div
-            initial={{ opacity: 0, y: 22 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
-            className="lg:col-span-6 xl:col-span-6 flex flex-col"
+            transition={{ duration: 0.4, delay: 0.15, ease: "easeOut" }}
+            className="lg:col-span-5 xl:col-span-4 flex flex-col"
           >
-            <ScanVelocityChart data={systemMetrics} />
+            <ActivityFeed
+              activities={activities}
+              onSimulateActivity={() => {
+                const act = generateMockActivity();
+                setActivities((prev) => [act, ...prev.slice(0, 39)]);
+              }}
+            />
           </motion.div>
         </section>
 
-        {/* Bento Row 3: Bottom Full-Width (Asset Ledger) */}
+        {/* Row 3: Transaction Table */}
         <motion.section
-          initial={{ opacity: 0, y: 25 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}
+          transition={{ duration: 0.4, delay: 0.2, ease: "easeOut" }}
         >
-          <AssetLedger
-            scans={assetScans}
-            onSelectAsset={(asset) => setSelectedAsset(asset)}
-            onRefresh={() => setAssetScans([...initialAssetScans])}
-            onAddNewScan={pushNewScanPayload}
+          <TransactionTable
+            transactions={transactions}
+            onAddNewTransaction={handleAddNewTransaction}
+            onSelectTransaction={(tx) => setSelectedTransaction(tx)}
           />
         </motion.section>
       </main>
 
-      {/* Footer System Telemetry Status Bar */}
-      <footer className="relative z-10 border-t border-white/10 bg-slate-950/70 py-4 px-6 text-center text-xs font-mono text-slate-500">
-        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      {/* Footer */}
+      <footer className="border-t border-zinc-900 bg-zinc-950 py-4 px-6 text-xs text-zinc-500">
+        <div className="max-w-[1500px] mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-cyan-400" />
-            <span>OMNITRACE ENTERPRISE SYSTEM CORE • SHA-256 VERIFIED IMMUTABLE LOGS</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span>PulseMetrics Dashboard • Production SaaS Monitoring</span>
           </div>
-          <div className="flex items-center gap-4 text-[11px] text-slate-400">
-            <span>WEBHOOK: /api/ingest</span>
-            <span>TLS 1.3 SECURE ENDPOINT</span>
-            <span>NEXT.js 15 APP ROUTER</span>
+          <div className="flex items-center gap-4 text-zinc-400">
+            <span>Next.js App Router</span>
+            <span>Tailwind CSS</span>
+            <span>Recharts</span>
           </div>
         </div>
       </footer>
 
-      {/* Telemetry Quick-Inspect Modal */}
-      <AssetDetailModal
-        asset={selectedAsset}
-        onClose={() => setSelectedAsset(null)}
+      {/* Receipt Inspect Modal */}
+      <TransactionModal
+        transaction={selectedTransaction}
+        onClose={() => setSelectedTransaction(null)}
       />
     </div>
   );
